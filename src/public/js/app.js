@@ -1,43 +1,22 @@
-const messageList = document.querySelector("ul");
-const nickForm = document.querySelector("#nick");
-const messageForm = document.querySelector("#message");
-const socket = new WebSocket(`ws://${window.location.host}`);
+const socket = io();
 
-// 들어온 메시지(string)를 -> json -> string 으로 변환
-function makeMessage(type, payload) {
-  const msg = { type, payload };
-  return JSON.stringify(msg);
+const welcome = document.getElementById("welcome");
+const form = welcome.querySelector("form");
+
+function backendDone(msg) {
+  console.log(`The backend says: `, msg);
 }
 
-socket.addEventListener("open", () => {
-  console.log("Connected to Server ✅");
-});
-
-socket.addEventListener("message", (message) => {
-  const li = document.createElement("li"); // 메시지 올때마다 li 생성
-  li.innerText = message.data; // li 텍스트에 메시지 데이터 넣음
-  messageList.append(li); // 메시지 리스트에 li 추가
-
-  console.log("New message: ", message.data);
-});
-
-socket.addEventListener("close", () => {
-  console.log("Disconnected from Server ❌");
-});
-
-function handleSubmit(event) {
+function handleRoomSubmit(event) {
   event.preventDefault();
-  const input = messageForm.querySelector("input");
-  socket.send(makeMessage("new_message", input.value));
+  const input = form.querySelector("input");
+  socket.emit("enter_room", input.value, backendDone);
+  // "room"이란 이름으로 object를 백엔드로 전송함
+  // emit를 이용하여 특정 이벤트에 대한 처리를 지정할수 있음
+  // object를 인자로 보낼 수 있음
+  // 세번째 인자로 callback fuction(서버에서 직접 실행되는 함수) 지정
+  // 서버로 부터 함수를 호출할 수 있는 데 해당 부분이 프론트엔드에 있다!
   input.value = "";
 }
 
-function handleNickSubmit(event) {
-  event.preventDefault();
-  const input = nickForm.querySelector("input");
-  socket.send(makeMessage("nickname", input.value));
-  input.value = "";
-}
-
-messageForm.addEventListener("submit", handleSubmit);
-nickForm.addEventListener("submit", handleNickSubmit);
+form.addEventListener("submit", handleRoomSubmit);
