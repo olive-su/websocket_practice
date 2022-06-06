@@ -16,21 +16,74 @@ const handleListen = () => console.log(`Listening on http://localhost:3000`);
 const httpServer = http.createServer(app);
 const wsServer = SocketIO(httpServer);
 
+function publicRooms() {
+  // const sids = wsServer.sockets.adapter.sids;
+  // const rooms = wsServer.sockets.adapter.rooms;
+
+  const {
+    sockets: {
+      adapter: { sids, rooms },
+    },
+  } = wsServer;
+
+  const publicRooms = [];
+  rooms.forEach((_, key) => {
+    // key 가 있으면 public room
+    if (sids.get(key) === undefined) {
+      publicRooms.push(key);
+    }
+  });
+  return publicRooms; // 서버 안에 있는 모든 방의 array 리턴
+}
+
 wsServer.on("connection", (socket) => {
+  socket["nickname"] = "Anon";
   socket.onAny((event) => {
     console.log(`Event name : ${event}`);
   });
-  // 서버에서 프론트와의 연결을 할 준비가 됨
+
   socket.on("enter_room", (roomName, done) => {
-    console.log(socket.id); // 현재 socket의 id를 보여줌(socket에는 id가 있어서 socket마다 구별 가능)
-    console.log(socket.rooms); // 현재 socket이 있는 room 이름을 보여줌
     socket.join(roomName);
-    console.log(socket.rooms);
-    setTimeout(() => {
-      done("hello from the backend");
-    }, 10000);
+    done();
+    socket.to(roomName).emit("welcome", socket.nickname);
+    wsServer.sockets.emit("room_change", publicRooms()); // 생성된 모든 룸 정보를 모든 방에 메시지 보냄
   });
+
+  // 서버에서 프론트와의 연결을 할 준비가 됨
+  // socket.on("enter_room", (roomName, done) => {
+  //   console.log(socket.id); // 현재 socket의 id를 보여줌(socket에는 id가 있어서 socket마다 구별 가능)
+  //   console.log(socket.rooms); // 현재 socket에 있는 모든 room 이름을 보여줌
+  //   socket.join(roomName);
+  //   console.log(socket.rooms);
+  //   setTimeout(() => {
+  //     done("hello from the backend");
+  //   }, 10000);
+  //   socket.to(roomName).emit("welcome", socket.nickname);
+  // });
   // 직접 만든 이벤트도 어떤 이벤트던 간에 socket.on으로 연결시켜 줄 수 있음
+
+  socket.on("disconnecting", () => {
+    socket.rooms.forEach((room) => {
+      socket.to(room).emit("bye", socket.nickname);
+    });
+    // "disconnecting" event는 방을 떠나기 직전에 발생하므로 따로 "disconnect" event에 room_change를 넣어준다.
+    // wsServer.sockets.emit("room_change", publicRooms()); // 생성된 모든 룸 정보를 모든 방에 메시지 보냄
+  });
+
+  socket.on("disconnect", () => {
+    // 방을 떠나면 socket.io가 방을 삭제한다.
+    wsServer.sockets.emit("room_change", publicRooms()); // 생성된 모든 룸 정보를 모든 방에 메시지 보냄
+  });
+
+  socket.on("new_message", (msg, room, done) => {
+    socket.to(room).emit("new_message", `${socket.nickname}: ${msg}`);
+    done();
+  });
+
+  // "nickname" event 발생시, nickname 을 가져와서 socket에 저장
+  socket.on("nickname", (nickname) => {
+    socket["nickname"] = nickname;
+  });
 });
 
 // websocket 부분 (socket.io와의 비교를 위해 주석 처리함)
